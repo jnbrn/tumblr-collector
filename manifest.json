@@ -1,0 +1,39 @@
+{
+  "name": "Tumblr Post Collector",
+  "description": "Collect and organize your liked Tumblr posts with CSV export and bulk image download features",
+  "version": "0.5",
+  "minimum_chrome_version": "88",
+  "manifest_version": 3,
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "downloads",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.tumblr.com/liked/by/*",
+    "https://*.media.tumblr.com/*"
+  ],
+  "action": {
+    "default_icon": "/icon_128.png",
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "16": "/icon_16.png",
+    "48": "/icon_48.png",
+    "128": "/icon_128.png"
+  },
+  "background": {
+    "service_worker": "main.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.tumblr.com/liked/by/*"],
+      "js": ["/page_content.js"]
+    }
+  ],
+  "web_accessible_resources": [{
+    "resources": ["data.html", "jszip.min.js"],
+    "matches": ["<all_urls>"]
+  }]
+}

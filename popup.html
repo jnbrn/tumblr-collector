@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      width: 300px;
+      padding: 10px;
+    }
+    .button-container {
+      margin-bottom: 10px;
+    }
+    button {
+      width: 100%;
+      padding: 8px;
+      background-color: #001935;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover:not(:disabled) {
+      background-color: #00284f;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    #status {
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+      min-height: 16px;
+      margin: 8px 0;
+      line-height: 1.4;
+    }
+    .history-header {
+      font-weight: bold;
+      margin: 15px 0 10px 0;
+      padding-bottom: 5px;
+      border-bottom: 2px solid #001935;
+    }
+    #historyList {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .history-item {
+      padding: 8px;
+      border-bottom: 1px solid #eee;
+    }
+    .history-item:hover {
+      background-color: #f5f5f5;
+    }
+    .history-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .history-username {
+      font-weight: bold;
+      color: #001935;
+    }
+    .history-date {
+      font-size: 11px;
+      color: #666;
+    }
+    .download-options {
+      display: flex;
+      gap: 8px;
+    }
+    .download-link {
+      color: #001935;
+      text-decoration: none;
+      font-size: 12px;
+      padding: 2px 8px;
+      border: 1px solid #001935;
+      border-radius: 3px;
+    }
+    .download-link:hover {
+      background-color: #001935;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="button-container">
+    <button id="collectButton">Collect Posts</button>
+  </div>
+  <div id="status"></div>
+  <div class="history-header">Collection History</div>
+  <div id="historyList">
+    <div class="history-item">Loading history...</div>
+  </div>
+  <script src="jszip.min.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html> 

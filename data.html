@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tumblr Likes Data</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .username {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        #downloadCsv {
+            padding: 10px 20px;
+            background-color: #001935;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #downloadCsv:hover {
+            background-color: #00284f;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        .image-preview {
+            max-width: 100px;
+            max-height: 100px;
+            cursor: pointer;
+        }
+        .tag {
+            display: inline-block;
+            background-color: #e9ecef;
+            padding: 2px 8px;
+            margin: 2px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        #status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="username" id="usernameDisplay">Loading...</div>
+            <button id="downloadCsv">Download CSV</button>
+        </div>
+        <div id="status"></div>
+        <table id="postsTable">
+            <thead>
+                <tr>
+                    <th>Blog Name</th>
+                    <th>Post Type</th>
+                    <th>Media Preview</th>
+                    <th>Tags</th>
+                    <th>Post Link</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <tr>
+                    <td colspan="5" style="text-align: center;">Loading data...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <script src="data.js"></script>
+</body>
+</html> 
