@@ -13,17 +13,19 @@ function addToHistory(username) {
         let history = result.scrapedHistory || [];
         const existingIndex = history.findIndex(item => item.username === username);
         
+        // Store only metadata in history, not the full posts
+        const historyEntry = {
+            username: username,
+            lastScraped: new Date().toISOString(),
+            postCount: allPosts.length,
+            // Store posts in chunks
+            chunks: Math.ceil(allPosts.length / 1000) // Split into chunks of 1000 posts
+        };
+        
         if (existingIndex !== -1) {
-            // Update existing entry
-            history[existingIndex].lastScraped = new Date().toISOString();
-            history[existingIndex].posts = allPosts;
+            history[existingIndex] = historyEntry;
         } else {
-            // Add new entry
-            history.push({
-                username: username,
-                lastScraped: new Date().toISOString(),
-                posts: allPosts
-            });
+            history.push(historyEntry);
         }
         
         // Keep only last 50 entries
@@ -31,8 +33,72 @@ function addToHistory(username) {
             history = history.slice(-50);
         }
         
-        chrome.storage.local.set({ scrapedHistory: history }, function() {
-            showHistory(); // Refresh history display
+        // Store the history metadata
+        chrome.storage.local.set({ scrapedHistory: history }, async function() {
+            // Store the posts in chunks
+            try {
+                await storePostsInChunks(username, allPosts);
+                showHistory(); // Refresh history display
+            } catch (error) {
+                console.error('Error storing posts:', error);
+                document.getElementById('status').textContent = 'Error storing posts: ' + error.message;
+            }
+        });
+    });
+}
+
+// Add new function to store posts in chunks
+async function storePostsInChunks(username, posts) {
+    const CHUNK_SIZE = 1000;
+    const chunks = [];
+    
+    for (let i = 0; i < posts.length; i += CHUNK_SIZE) {
+        chunks.push(posts.slice(i, i + CHUNK_SIZE));
+    }
+    
+    // Store each chunk
+    for (let i = 0; i < chunks.length; i++) {
+        const key = `posts_${username}_chunk_${i}`;
+        await new Promise((resolve, reject) => {
+            chrome.storage.local.set({ [key]: chunks[i] }, function() {
+                if (chrome.runtime.lastError) {
+                    reject(chrome.runtime.lastError);
+                } else {
+                    resolve();
+                }
+            });
+        });
+    }
+}
+
+// Add new function to retrieve posts
+async function getStoredPosts(username) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.get(['scrapedHistory'], async function(result) {
+            try {
+                const history = result.scrapedHistory || [];
+                const userData = history.find(item => item.username === username);
+                
+                if (!userData) {
+                    resolve([]);
+                    return;
+                }
+                
+                const allPosts = [];
+                for (let i = 0; i < userData.chunks; i++) {
+                    const key = `posts_${username}_chunk_${i}`;
+                    const chunk = await new Promise((resolve) => {
+                        chrome.storage.local.get([key], function(result) {
+                            resolve(result[key] || []);
+                        });
+                    });
+                    allPosts.push(...chunk);
+                }
+                
+                resolve(allPosts);
+            } catch (error) {
+                reject(error);
+            }
         });
     });
 }
@@ -55,7 +121,7 @@ function showHistory() {
                             <span class="history-date">${new Date(item.lastScraped).toLocaleDateString()}</span>
                         </div>
                         <div class="history-info">
-                            ${item.posts ? item.posts.length : 0} posts collected
+                            ${item.postCount} posts collected
                         </div>
                         <div class="download-options">
                             <a href="#" class="download-link" data-username="${item.username}" data-download-type="csv">CSV</a>
@@ -108,22 +174,21 @@ document.getElementById('collectButton').addEventListener('click', function() {
 });
 
 // Handle clicks on download links
-document.getElementById('historyList').addEventListener('click', function(e) {
+document.getElementById('historyList').addEventListener('click', async function(e) {
     if (e.target.classList.contains('download-link')) {
         e.preventDefault();
         const username = e.target.dataset.username;
         const downloadType = e.target.dataset.downloadType;
         
-        chrome.storage.local.get(['scrapedHistory'], function(result) {
-            const history = result.scrapedHistory || [];
-            const userData = history.find(item => item.username === username);
+        try {
+            const posts = await getStoredPosts(username);
             
-            if (userData && userData.posts) {
+            if (posts && posts.length > 0) {
                 if (downloadType === 'images') {
-                    downloadImagesAsZip(userData.posts, username);
+                    downloadImagesAsZip(posts, username);
                 } else {
                     // Download CSV
-                    const csvContent = createCSV(userData.posts);
+                    const csvContent = createCSV(posts);
                     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                     const url = URL.createObjectURL(blob);
                     const link = document.createElement('a');
@@ -135,7 +200,10 @@ document.getElementById('historyList').addEventListener('click', function(e) {
                     URL.revokeObjectURL(url);
                 }
             }
-        });
+        } catch (error) {
+            console.error('Error retrieving posts:', error);
+            document.getElementById('status').textContent = 'Error retrieving posts: ' + error.message;
+        }
     }
 });
 
@@ -281,3 +349,45 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
 
 // Show history immediately when popup opens
 showHistory();
+
+// Add this function to clean up old data
+async function cleanupOldData() {
+    chrome.storage.local.get(null, async function(items) {
+        const keysToRemove = [];
+        const now = new Date();
+        
+        // Find history entries older than 30 days
+        if (items.scrapedHistory) {
+            const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+            
+            items.scrapedHistory = items.scrapedHistory.filter(item => {
+                const isOld = new Date(item.lastScraped) < thirtyDaysAgo;
+                if (isOld) {
+                    // Mark associated chunks for removal
+                    for (let i = 0; i < item.chunks; i++) {
+                        keysToRemove.push(`posts_${item.username}_chunk_${i}`);
+                    }
+                }
+                return !isOld;
+            });
+            
+            // Update history
+            await new Promise(resolve => {
+                chrome.storage.local.set({ scrapedHistory: items.scrapedHistory }, resolve);
+            });
+        }
+        
+        // Remove old chunks
+        if (keysToRemove.length > 0) {
+            await new Promise(resolve => {
+                chrome.storage.local.remove(keysToRemove, resolve);
+            });
+        }
+    });
+}
+
+// Call cleanup when popup opens
+document.addEventListener('DOMContentLoaded', function() {
+    cleanupOldData();
+    showHistory();
+});
