@@ -18,6 +18,8 @@ A Chrome extension that helps you collect, organize, and download your liked Tum
 - Download all images from collected posts as a ZIP file
 - View collection history
 - Organize downloaded images with post ID-based filenames
+- Modal interface for viewing post details
+- Data persistence across browser sessions
 
 ## Installation
 
@@ -32,17 +34,26 @@ A Chrome extension that helps you collect, organize, and download your liked Tum
    - Navigate to a Tumblr likes page (e.g., `https://www.tumblr.com/liked/by/username`)
    - Click the extension icon to open the popup
    - Click "Collect Posts" to start collecting
-   - Wait for the collection to complete
+   - View real-time collection progress in the popup
 
-2. **Viewing History**
-   - All your collections are automatically saved
+2. **Viewing Posts**
+   - Click on any post in the collection to open a detailed modal view
+   - Modal shows full post information including:
+     - Post content
+     - Images
+     - Tags
+     - Original blog information
+
+3. **Managing Collections**
+   - All collections are automatically saved
    - View them in the "Collection History" section
    - Each entry shows:
      - Username
      - Collection date
      - Number of posts collected
+   - Filter and search through your collections
 
-3. **Downloading Data**
+4. **Downloading Data**
    - From the Collection History, you have two options for each entry:
      - **CSV**: Download post data as a CSV file
      - **Images**: Download all images as a ZIP file
@@ -52,9 +63,10 @@ A Chrome extension that helps you collect, organize, and download your liked Tum
 
 - `manifest.json`: Extension configuration
 - `popup.html`: Main extension popup interface
-- `popup.js`: Popup functionality
+- `popup.js`: Popup functionality and UI management
 - `page_content.js`: Content script for collecting post data
 - `main.js`: Background service worker
+- `data.js`: Data management and storage
 - `jszip.min.js`: Library for ZIP file creation
 
 ## Requirements
@@ -68,14 +80,15 @@ The extension requires the following permissions:
 - `tabs`: To access tab information
 - `activeTab`: To interact with the current tab
 - `downloads`: To download files
-- `storage`: To save collection history
+- `storage`: To save collection history and settings
 
 ## Notes
 
-- The extension only works on Tumblr likes pages
-- Collection time depends on the number of posts
+- The extension works on Tumblr likes pages
+- Collection time varies based on number of posts and network speed
 - Large image collections may take time to download
-- History keeps the last 50 collections
+- Collections are preserved across browser sessions
+- Data is stored locally in Chrome storage
 
 ## Troubleshooting
 
@@ -83,8 +96,17 @@ If you encounter issues:
 1. Make sure you're on a Tumblr likes page
 2. Refresh the page before collecting
 3. Check the browser console for error messages
-4. Try reloading the extension
+4. Clear extension storage if experiencing data issues
+5. Try reloading the extension
 
 ## Contributing
 
-Feel free to submit issues and enhancement requests!
+Contributions are welcome! Feel free to:
+- Submit bug reports
+- Propose new features
+- Create pull requests
+- Improve documentation
+
+## License
+
+This project is licensed under the MIT License.

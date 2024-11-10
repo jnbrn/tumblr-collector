@@ -1,3 +1,7 @@
+let isScrolling = false;
+let lastPostCount = 0;
+let noNewPostsCount = 0;
+
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 	if (request.text === 'download_images_and_videos') {
 		console.log("[page_content] Received download_images_and_videos request");
@@ -8,68 +12,81 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 	if (request.action === "startDownload") {
 		console.log("[page_content] Received startDownload request");
 		try {
-			// Get initial content
+			// Get all posts at once since they're already loaded
 			let postsData = collectPostsData();
-			console.log("[page_content] Initial posts collected:", postsData.length);
-			console.log("[page_content] First post sample:", postsData[0]);
+			console.log("[page_content] Posts collected:", postsData.length);
 			
-			// Send first batch to background script
-			console.log("[page_content] Sending processPosts message");
+			// Send all posts at once
 			chrome.runtime.sendMessage({
 				action: "processPosts",
 				data: postsData,
-				isPageComplete: false
+				isPageComplete: true
 			}, (response) => {
 				console.log("[page_content] processPosts response:", response);
 			});
 
-			// Setup infinite scroll handling
-			let lastScrollHeight = document.documentElement.scrollHeight;
-			console.log("[page_content] Initial scroll height:", lastScrollHeight);
+			// Send completion message
+			chrome.runtime.sendMessage({
+				action: "downloadComplete"
+			});
 			
-			let scrollInterval = setInterval(() => {
-				window.scrollTo(0, document.documentElement.scrollHeight);
-				console.log("[page_content] Scrolled to bottom");
-				
-				// Wait for new content to load
-				setTimeout(() => {
-					const newHeight = document.documentElement.scrollHeight;
-					console.log("[page_content] New scroll height:", newHeight);
-					
-					if (newHeight > lastScrollHeight) {
-						// New content loaded
-						let newBatch = collectPostsData();
-						console.log("[page_content] New batch collected:", newBatch.length);
-						chrome.runtime.sendMessage({
-							action: "processPosts",
-							data: newBatch,
-							isPageComplete: false
-						}, (response) => {
-							console.log("[page_content] New batch response:", response);
-						});
-						lastScrollHeight = newHeight;
-					} else {
-						// No more content, stop scrolling
-						console.log("[page_content] No new content found, completing download");
-						clearInterval(scrollInterval);
-						chrome.runtime.sendMessage({
-							action: "downloadComplete"
-						}, (response) => {
-							console.log("[page_content] Download complete response:", response);
-						});
-					}
-				}, 2000);
-			}, 3000);
-			
-			// Send immediate response
-			sendResponse({status: "started"});
+			sendResponse({status: "completed"});
 		} catch (error) {
 			console.error("[page_content] Error in startDownload:", error);
 			sendResponse({error: error.message});
 		}
 		return true;
 	}
+
+	if (request.action === "startScrolling") {
+		if (!isScrolling) {
+			isScrolling = true;
+			lastPostCount = 0;
+			noNewPostsCount = 0;
+			scrollToBottom();
+		}
+		sendResponse({status: "started"});
+		return true;
+	}
 });
+
+function scrollToBottom() {
+	if (!isScrolling) return;
+
+	const posts = document.querySelectorAll('.post, article[data-post-id]');
+	const currentPostCount = posts.length;
+
+	// Send update to popup
+	chrome.runtime.sendMessage({
+		action: "scrollUpdate",
+		postsFound: currentPostCount
+	});
+
+	if (currentPostCount > lastPostCount) {
+		// New posts found, reset counter
+		lastPostCount = currentPostCount;
+		noNewPostsCount = 0;
+	} else {
+		// No new posts found, increment counter
+		noNewPostsCount++;
+	}
+
+	// If no new posts after 3 attempts, consider scrolling complete
+	if (noNewPostsCount >= 3) {
+		isScrolling = false;
+		chrome.runtime.sendMessage({
+			action: "scrollComplete",
+			totalPosts: currentPostCount
+		});
+		return;
+	}
+
+	// Scroll to bottom
+	window.scrollTo(0, document.documentElement.scrollHeight);
+
+	// Wait for new content to load
+	setTimeout(scrollToBottom, 2000);
+}
 
 let processedPostIds = new Set(); // Keep track of processed post IDs
 

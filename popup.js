@@ -484,3 +484,47 @@ document.addEventListener('DOMContentLoaded', function() {
     cleanupOldData();
     showHistory();
 });
+
+// Add this after your existing button event listener
+document.getElementById('scrollButton').addEventListener('click', function() {
+    const button = document.getElementById('scrollButton');
+    const status = document.getElementById('status');
+    
+    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+        if (tabs[0].url.includes('tumblr.com/liked/by/')) {
+            button.textContent = 'Scrolling...';
+            button.disabled = true;
+            status.textContent = 'Scrolling to load all posts...';
+            
+            chrome.tabs.sendMessage(tabs[0].id, {action: "startScrolling"}, function(response) {
+                if (chrome.runtime.lastError) {
+                    console.error('Chrome runtime error:', chrome.runtime.lastError);
+                    status.textContent = 'Please refresh the page and try again';
+                    button.textContent = 'Scroll to Bottom';
+                    button.disabled = false;
+                }
+            });
+        } else {
+            status.textContent = 'Please navigate to a Tumblr likes page';
+        }
+    });
+});
+
+// Modify the existing message listener to handle scroll updates
+chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+    const scrollButton = document.getElementById('scrollButton');
+    const collectButton = document.getElementById('collectButton');
+    const status = document.getElementById('status');
+    
+    if (request.action === "scrollUpdate") {
+        status.textContent = `Loading posts... ${request.postsFound} posts found`;
+    } else if (request.action === "scrollComplete") {
+        scrollButton.textContent = 'Scroll to Bottom';
+        scrollButton.disabled = false;
+        status.textContent = `All posts loaded! ${request.totalPosts} posts found. Click 'Collect Posts' to start collecting.`;
+    } else if (request.action === "processPosts") {
+        // ... your existing processPosts handling ...
+    } else if (request.action === "downloadComplete") {
+        // ... your existing downloadComplete handling ...
+    }
+});

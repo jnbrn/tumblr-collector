@@ -8,6 +8,9 @@
     }
     .button-container {
       margin-bottom: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
     button {
       width: 100%;
@@ -84,6 +87,7 @@
 </head>
 <body>
   <div class="button-container">
+    <button id="scrollButton">Scroll to Bottom</button>
     <button id="collectButton">Collect Posts</button>
   </div>
   <div id="status"></div>
