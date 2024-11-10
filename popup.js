@@ -9,17 +9,28 @@ if (typeof JSZip === 'undefined') {
 
 // Store scraped usernames in chrome.storage
 function addToHistory(username) {
-    chrome.storage.local.get(['scrapedHistory'], function(result) {
+    chrome.storage.local.get(['scrapedHistory'], async function(result) {
         let history = result.scrapedHistory || [];
         const existingIndex = history.findIndex(item => item.username === username);
         
-        // Store only metadata in history, not the full posts
+        let existingPosts = [];
+        if (existingIndex !== -1) {
+            // Get existing posts
+            existingPosts = await getStoredPosts(username);
+            
+            // Filter out duplicate posts
+            const existingPostIds = new Set(existingPosts.map(post => post.id));
+            allPosts = allPosts.filter(post => !existingPostIds.has(post.id));
+            
+            // Combine with new unique posts
+            allPosts = [...existingPosts, ...allPosts];
+        }
+        
         const historyEntry = {
             username: username,
             lastScraped: new Date().toISOString(),
             postCount: allPosts.length,
-            // Store posts in chunks
-            chunks: Math.ceil(allPosts.length / 1000) // Split into chunks of 1000 posts
+            chunks: Math.ceil(allPosts.length / 1000)
         };
         
         if (existingIndex !== -1) {
@@ -33,12 +44,11 @@ function addToHistory(username) {
             history = history.slice(-50);
         }
         
-        // Store the history metadata
+        // Store the history metadata and posts
         chrome.storage.local.set({ scrapedHistory: history }, async function() {
-            // Store the posts in chunks
             try {
                 await storePostsInChunks(username, allPosts);
-                showHistory(); // Refresh history display
+                showHistory();
             } catch (error) {
                 console.error('Error storing posts:', error);
                 document.getElementById('status').textContent = 'Error storing posts: ' + error.message;
@@ -103,6 +113,30 @@ async function getStoredPosts(username) {
     });
 }
 
+// Add function to format relative time
+function formatRelativeTime(dateString) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now - date) / 1000);
+    
+    if (diffInSeconds < 60) {
+        return `${diffInSeconds} seconds ago`;
+    }
+    
+    const diffInMinutes = Math.floor(diffInSeconds / 60);
+    if (diffInMinutes < 60) {
+        return `${diffInMinutes} minute${diffInMinutes !== 1 ? 's' : ''} ago`;
+    }
+    
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) {
+        return `${diffInHours} hour${diffInHours !== 1 ? 's' : ''} ago`;
+    }
+    
+    return date.toLocaleDateString();
+}
+
+// Modify showHistory function to use relative time
 function showHistory() {
     const historyList = document.getElementById('historyList');
     
@@ -118,7 +152,7 @@ function showHistory() {
                     <div class="history-item">
                         <div class="history-item-header">
                             <span class="history-username">${item.username}</span>
-                            <span class="history-date">${new Date(item.lastScraped).toLocaleDateString()}</span>
+                            <span class="history-date">${formatRelativeTime(item.lastScraped)}</span>
                         </div>
                         <div class="history-info">
                             ${item.postCount} posts collected
@@ -324,20 +358,38 @@ async function downloadImagesAsZip(posts, username) {
     }
 }
 
-// Listen for messages
+// Modify the message listener to update history after each batch
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     const button = document.getElementById('collectButton');
     const status = document.getElementById('status');
     
     if (request.action === "processPosts") {
-        allPosts = allPosts.concat(request.data);
+        // Instead of concatenating, use Set to ensure uniqueness by post ID
+        const newPosts = request.data;
+        const existingPostIds = new Set(allPosts.map(post => post.id));
+        
+        // Only add posts that don't already exist
+        const uniqueNewPosts = newPosts.filter(post => !existingPostIds.has(post.id));
+        allPosts = [...allPosts, ...uniqueNewPosts];
+        
+        // Update status with unique post count
         status.textContent = `Collected ${allPosts.length} posts...`;
+        
+        // Update history if we have new posts and know the username
+        if (uniqueNewPosts.length > 0) {
+            chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+                if (tabs[0].url.includes('tumblr.com/liked/by/')) {
+                    const username = tabs[0].url.split('/liked/by/')[1].split('/')[0];
+                    updateHistory(username);
+                }
+            });
+        }
     } else if (request.action === "downloadComplete") {
         button.textContent = 'Collect Posts';
         button.disabled = false;
-        status.textContent = `Collection complete! Found ${allPosts.length} posts`;
+        status.textContent = `Collection complete! Found ${allPosts.length} unique posts`;
         
-        // Extract username and save to history
+        // Final history update
         chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
             if (tabs[0].url.includes('tumblr.com/liked/by/')) {
                 const username = tabs[0].url.split('/liked/by/')[1].split('/')[0];
@@ -346,6 +398,47 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
         });
     }
 });
+
+// Add new function to update history without overwriting existing data
+async function updateHistory(username) {
+    chrome.storage.local.get(['scrapedHistory'], async function(result) {
+        let history = result.scrapedHistory || [];
+        const existingIndex = history.findIndex(item => item.username === username);
+        
+        if (existingIndex !== -1) {
+            // Get existing posts
+            const existingPosts = await getStoredPosts(username);
+            const existingPostIds = new Set(existingPosts.map(post => post.id));
+            
+            // Filter out posts that already exist
+            const uniqueNewPosts = allPosts.filter(post => !existingPostIds.has(post.id));
+            
+            if (uniqueNewPosts.length > 0) {
+                // Combine with existing posts
+                const combinedPosts = [...existingPosts, ...uniqueNewPosts];
+                
+                // Update history entry
+                history[existingIndex] = {
+                    ...history[existingIndex],
+                    lastScraped: new Date().toISOString(),
+                    postCount: combinedPosts.length,
+                    chunks: Math.ceil(combinedPosts.length / 1000)
+                };
+                
+                // Store updated history and posts
+                await new Promise(resolve => {
+                    chrome.storage.local.set({ scrapedHistory: history }, resolve);
+                });
+                
+                await storePostsInChunks(username, combinedPosts);
+                showHistory(); // Update the display
+            }
+        } else {
+            // If no existing history, use addToHistory
+            addToHistory(username);
+        }
+    });
+}
 
 // Show history immediately when popup opens
 showHistory();

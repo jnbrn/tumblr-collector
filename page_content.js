@@ -17,7 +17,8 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 			console.log("[page_content] Sending processPosts message");
 			chrome.runtime.sendMessage({
 				action: "processPosts",
-				data: postsData
+				data: postsData,
+				isPageComplete: false
 			}, (response) => {
 				console.log("[page_content] processPosts response:", response);
 			});
@@ -41,7 +42,8 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 						console.log("[page_content] New batch collected:", newBatch.length);
 						chrome.runtime.sendMessage({
 							action: "processPosts",
-							data: newBatch
+							data: newBatch,
+							isPageComplete: false
 						}, (response) => {
 							console.log("[page_content] New batch response:", response);
 						});
@@ -68,6 +70,8 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 		return true;
 	}
 });
+
+let processedPostIds = new Set(); // Keep track of processed post IDs
 
 function collectPostsData() {
 	console.log("[page_content] Starting collectPostsData");
