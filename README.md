@@ -18,7 +18,6 @@ A Chrome extension that helps you collect, organize, and download your liked Tum
 - Download all images from collected posts as a ZIP file
 - View collection history
 - Organize downloaded images with post ID-based filenames
-- Modal interface for viewing post details
 - Data persistence across browser sessions
 
 ## Installation

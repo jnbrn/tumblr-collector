@@ -167,6 +167,130 @@ function showHistory() {
     });
 }
 
+// Add collection history storage
+function addToCollectionHistory(username, posts) {
+    chrome.storage.local.get(['collectionHistory'], async function(result) {
+        let collections = result.collectionHistory || [];
+        
+        const collectionEntry = {
+            id: `${username}_${Date.now()}`,
+            username: username,
+            timestamp: new Date().toISOString(),
+            postCount: posts.length
+        };
+        
+        collections.push(collectionEntry);
+        
+        // Keep only last 50 collections
+        if (collections.length > 50) {
+            collections = collections.slice(-50);
+        }
+        
+        // Store the collection metadata and posts separately
+        chrome.storage.local.set({ 
+            collectionHistory: collections,
+            [`collection_${collectionEntry.id}`]: posts  // Store only the posts from this collection run
+        }, function() {
+            showCollectionHistory();
+        });
+    });
+}
+
+// Show collection history
+function showCollectionHistory() {
+    const collectionList = document.getElementById('collectionList');
+    
+    chrome.storage.local.get(['collectionHistory'], function(result) {
+        const collections = result.collectionHistory || [];
+        
+        if (collections.length === 0) {
+            collectionList.innerHTML = '<div class="history-item">No collections available</div>';
+        } else {
+            collectionList.innerHTML = collections
+                .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                .map(item => `
+                    <div class="history-item">
+                        <div class="history-item-header">
+                            <span class="history-username">${item.username}</span>
+                            <span class="history-date">${formatRelativeTime(item.timestamp)}</span>
+                        </div>
+                        <div class="history-info">
+                            Collection #${item.id.split('_')[1].slice(-4)} - ${item.postCount} posts
+                        </div>
+                        <div class="download-options">
+                            <a href="#" class="download-link" data-collection-id="${item.id}" data-download-type="csv">CSV</a>
+                            <a href="#" class="download-link" data-collection-id="${item.id}" data-download-type="images">Images</a>
+                        </div>
+                    </div>
+                `).join('');
+        }
+    });
+}
+
+// Add tab switching functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const tabs = document.querySelectorAll('.tab-button');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            // Remove active class from all tabs and contents
+            document.querySelectorAll('.tab-button').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            // Add active class to clicked tab and its content
+            tab.classList.add('active');
+            document.getElementById(tab.dataset.tab).classList.add('active');
+            
+            // Refresh the appropriate history view
+            if (tab.dataset.tab === 'userHistory') {
+                showHistory();
+            } else {
+                showCollectionHistory();
+            }
+        });
+    });
+});
+
+// Handle collection downloads
+document.getElementById('collectionList').addEventListener('click', async function(e) {
+    if (e.target.classList.contains('download-link')) {
+        e.preventDefault();
+        const collectionId = e.target.dataset.collectionId;
+        const downloadType = e.target.dataset.downloadType;
+        
+        try {
+            // Get posts specific to this collection
+            chrome.storage.local.get([`collection_${collectionId}`], function(result) {
+                const collectionPosts = result[`collection_${collectionId}`];
+                
+                if (!collectionPosts || collectionPosts.length === 0) {
+                    document.getElementById('status').textContent = 'No posts found for this collection';
+                    return;
+                }
+
+                if (downloadType === 'images') {
+                    const username = collectionId.split('_')[0];
+                    downloadImagesAsZip(collectionPosts, username);
+                } else {
+                    // Download CSV
+                    const csvContent = createCSV(collectionPosts);
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `tumblr_collection_${collectionId.split('_')[1].slice(-4)}.csv`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                }
+            });
+        } catch (error) {
+            console.error('Error retrieving collection posts:', error);
+            document.getElementById('status').textContent = 'Error retrieving collection posts: ' + error.message;
+        }
+    }
+});
+
 let allPosts = [];
 
 document.getElementById('collectButton').addEventListener('click', function() {
@@ -387,7 +511,7 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     } else if (request.action === "downloadComplete") {
         button.textContent = 'Collect Posts';
         button.disabled = false;
-        status.textContent = `Collection complete! Found ${allPosts.length} unique posts`;
+        status.textContent = `Collection complete!`;
         
         // Final history update
         chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
@@ -440,12 +564,29 @@ async function updateHistory(username) {
     });
 }
 
+// Modify the message listener to store collection data
+chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+    if (request.action === "processPosts") {
+        allPosts.push(...request.data);
+        
+        if (request.isPageComplete) {
+            const username = new URL(sender.tab.url).pathname.split('/').pop();
+            addToHistory(username);  // Keep existing user history
+            addToCollectionHistory(username, request.data);  // Add to collection history with only new posts
+        }
+        
+        sendResponse({status: "success"});
+        return true;
+    }
+    // ... rest of the listener code
+});
+
 // Show history immediately when popup opens
 showHistory();
 
 // Add this function to clean up old data
 async function cleanupOldData() {
-    chrome.storage.local.get(null, async function(items) {
+    chrome.storage.local.get(null, function(items) {
         const keysToRemove = [];
         const now = new Date();
         
@@ -463,19 +604,31 @@ async function cleanupOldData() {
                 }
                 return !isOld;
             });
+        }
+        
+        // Clean up old collections
+        if (items.collectionHistory) {
+            const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
             
-            // Update history
-            await new Promise(resolve => {
-                chrome.storage.local.set({ scrapedHistory: items.scrapedHistory }, resolve);
+            items.collectionHistory = items.collectionHistory.filter(item => {
+                const isOld = new Date(item.timestamp) < thirtyDaysAgo;
+                if (isOld) {
+                    keysToRemove.push(`collection_${item.id}`);
+                }
+                return !isOld;
             });
         }
         
-        // Remove old chunks
+        // Remove old data
         if (keysToRemove.length > 0) {
-            await new Promise(resolve => {
-                chrome.storage.local.remove(keysToRemove, resolve);
-            });
+            chrome.storage.local.remove(keysToRemove);
         }
+        
+        // Update filtered histories
+        chrome.storage.local.set({
+            scrapedHistory: items.scrapedHistory || [],
+            collectionHistory: items.collectionHistory || []
+        });
     });
 }
 
@@ -490,24 +643,33 @@ document.getElementById('scrollButton').addEventListener('click', function() {
     const button = document.getElementById('scrollButton');
     const status = document.getElementById('status');
     
-    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-        if (tabs[0].url.includes('tumblr.com/liked/by/')) {
-            button.textContent = 'Scrolling...';
-            button.disabled = true;
-            status.textContent = 'Scrolling to load all posts...';
-            
-            chrome.tabs.sendMessage(tabs[0].id, {action: "startScrolling"}, function(response) {
-                if (chrome.runtime.lastError) {
-                    console.error('Chrome runtime error:', chrome.runtime.lastError);
-                    status.textContent = 'Please refresh the page and try again';
-                    button.textContent = 'Scroll to Bottom';
-                    button.disabled = false;
-                }
+    if (button.textContent === 'Stop') {
+        // Send stop signal to content script
+        chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {action: "stopScrolling"}, function(response) {
+                button.textContent = 'Scroll to Bottom';
+                status.textContent = 'Scrolling stopped';
             });
-        } else {
-            status.textContent = 'Please navigate to a Tumblr likes page';
-        }
-    });
+        });
+    } else {
+        chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+            if (tabs[0].url.includes('tumblr.com/liked/by/')) {
+                button.textContent = 'Stop';
+                status.textContent = 'Scrolling to load more posts...';
+                
+                chrome.tabs.sendMessage(tabs[0].id, {action: "startScrolling"}, function(response) {
+                    if (chrome.runtime.lastError) {
+                        console.error('Chrome runtime error:', chrome.runtime.lastError);
+                        status.textContent = 'Please refresh the page and try again';
+                        button.textContent = 'Scroll to Bottom';
+                        return;
+                    }
+                });
+            } else {
+                status.textContent = 'Please navigate to a Tumblr likes page';
+            }
+        });
+    }
 });
 
 // Modify the existing message listener to handle scroll updates

@@ -83,6 +83,50 @@
       background-color: #001935;
       color: white;
     }
+    .tabs {
+      display: flex;
+      margin: 0;
+      padding: 0 10px;
+      border-bottom: 2px solid #001935;
+      background: #f5f5f5;
+    }
+    .tab-button {
+      flex: 1;
+      padding: 8px 15px;
+      border: none;
+      background: transparent;
+      color: #666;
+      cursor: pointer;
+      font-size: 14px;
+      position: relative;
+      transition: all 0.2s;
+      border-radius: 4px 4px 0 0;
+      margin-bottom: -2px;
+    }
+    .tab-button:hover {
+      background: #e0e0e0;
+      color: #eee;
+    }
+    .tab-button.active {
+      background: #001935;
+      color: white;
+      border-bottom: 2px solid #001935;
+    }
+    .tab-button:not(.active) {
+      border-bottom: 2px solid transparent;
+    }
+    .tab-content {
+      display: none;
+      padding: 15px 10px;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    #content {
+      background: white;
+      border-radius: 4px;
+      margin-top: 15px;
+    }
   </style>
 </head>
 <body>
@@ -91,11 +135,21 @@
     <button id="collectButton">Collect Posts</button>
   </div>
   <div id="status"></div>
-  <div class="history-header">Collection History</div>
-  <div id="historyList">
-    <div class="history-item">Loading history...</div>
+  <div id="content">
+    <div id="historyTabs" class="tabs">
+      <button class="tab-button active" data-tab="userHistory">Users</button>
+      <button class="tab-button" data-tab="collectionHistory">Collections</button>
+    </div>
+    <div id="userHistory" class="tab-content active">
+      <div id="historyList">
+        <div class="history-item">Loading history...</div>
+      </div>
+    </div>
+    <div id="collectionHistory" class="tab-content">
+      <div id="collectionList"></div>
+    </div>
   </div>
   <script src="jszip.min.js"></script>
   <script src="popup.js"></script>
 </body>
-</html> 
+</html>

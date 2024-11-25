@@ -38,6 +38,12 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 		return true;
 	}
 
+	if (request.action === "stopScrolling") {
+		isScrolling = false;
+		sendResponse({status: "stopped"});
+		return true;
+	}
+
 	if (request.action === "startScrolling") {
 		if (!isScrolling) {
 			isScrolling = true;
@@ -51,41 +57,36 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 });
 
 function scrollToBottom() {
-	if (!isScrolling) return;
-
-	const posts = document.querySelectorAll('.post, article[data-post-id]');
-	const currentPostCount = posts.length;
-
-	// Send update to popup
-	chrome.runtime.sendMessage({
-		action: "scrollUpdate",
-		postsFound: currentPostCount
-	});
-
-	if (currentPostCount > lastPostCount) {
-		// New posts found, reset counter
-		lastPostCount = currentPostCount;
-		noNewPostsCount = 0;
-	} else {
-		// No new posts found, increment counter
-		noNewPostsCount++;
-	}
-
-	// If no new posts after 3 attempts, consider scrolling complete
-	if (noNewPostsCount >= 3) {
-		isScrolling = false;
-		chrome.runtime.sendMessage({
-			action: "scrollComplete",
-			totalPosts: currentPostCount
-		});
+	if (!isScrolling) {
 		return;
 	}
 
-	// Scroll to bottom
-	window.scrollTo(0, document.documentElement.scrollHeight);
-
-	// Wait for new content to load
-	setTimeout(scrollToBottom, 2000);
+	window.scrollTo(0, document.body.scrollHeight);
+	
+	// Count current posts
+	const currentPosts = document.querySelectorAll('[data-id]').length;
+	
+	if (currentPosts === lastPostCount) {
+		noNewPostsCount++;
+		if (noNewPostsCount >= 5) {
+			// No new posts after 5 attempts, assume we're done
+			isScrolling = false;
+			chrome.runtime.sendMessage({action: "scrollComplete"});
+			return;
+		}
+	} else {
+		noNewPostsCount = 0;
+		lastPostCount = currentPosts;
+	}
+	
+	// Send progress update
+	chrome.runtime.sendMessage({
+		action: "scrollProgress",
+		postCount: currentPosts
+	});
+	
+	// Continue scrolling after a delay
+	setTimeout(scrollToBottom, 1000);
 }
 
 let processedPostIds = new Set(); // Keep track of processed post IDs
@@ -216,4 +217,3 @@ function collectPostsData() {
 function getImagesAndVideosOnThisPage() {
 	// Your existing implementation...
 }
-
